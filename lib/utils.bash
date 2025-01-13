@@ -38,10 +38,16 @@ download_release() {
   version="$1"
   filename="$2"
 
-  url="$GH_REPO/releases/download/v${version}/${TOOL_NAME}_$(get_platform)_$(get_arch).tar.gz"
+  url="$GH_REPO/releases/download/v${version}/${TOOL_NAME}_${version}_$(get_platform)_$(get_arch).tar.gz"
 
   echo "* Downloading $TOOL_NAME release $version..."
-  curl "${curl_opts[@]}" -o "$filename" -C - "$url" || fail "Could not download $url"
+
+  if ! curl "${curl_opts[@]}" -o "$filename" -C - "$url"; then
+    echo "* First attempt failed. Retrying without version in archive name..."
+
+    url="$GH_REPO/releases/download/v${version}/${TOOL_NAME}_$(get_platform)_$(get_arch).tar.gz"
+    curl "${curl_opts[@]}" -o "$filename" -C - "$url" || fail "Could not download $url"
+  fi
 }
 
 install_version() {
@@ -56,9 +62,14 @@ install_version() {
   (
     local tool_cmd
     tool_cmd="$(echo "$TOOL_TEST" | cut -d' ' -f1)"
+    tool_path="$(find "$ASDF_DOWNLOAD_PATH" -maxdepth 2 -type f -name "$tool_cmd" -print -quit)"
 
-    mkdir -p "$install_path"/bin
-    cp "$ASDF_DOWNLOAD_PATH"/"$tool_cmd" "$install_path"/bin
+    if [[ -n "$tool_path" ]]; then
+      mkdir -p "$install_path"/bin
+      cp "$tool_path" "$install_path/bin"
+    else
+      fail "Could not find $tool_cmd in $ASDF_DOWNLOAD_PATH"
+    fi
 
     test -x "$install_path/bin/$tool_cmd" || fail "Expected $install_path/bin/$tool_cmd to be executable."
 
